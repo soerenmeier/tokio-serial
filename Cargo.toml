@@ -1,6 +1,6 @@
 [package]
 name = "tokio-serial"
-version = "4.3.3"
+version = "4.4.0"
 authors = ["Zac Berkowitz <zac.berkowitz@gmail.com>"]
 description = "A serial port implementation for tokio"
 license = "MIT"
@@ -21,11 +21,11 @@ default = ["libudev"]
 libudev = ["mio-serial/libudev"]
 
 [dependencies]
-tokio = { version = "0.2.0", features = ["io-driver"], default-features = false }
-mio-serial = { version = "3.3.0", default-features = false }
+tokio = { version = "1.0", features = ["net"], default-features = false }
+mio-serial = { version = "3.4", git = "https://github.com/soerenmeier/mio-serial", default-features = false }
 
 [dev-dependencies]
 futures = "0.3.1"
-tokio = { version = "0.2.0", features = ["macros"], default-features = false }
-tokio-util = { version = "0.2.0", features = ["codec"], default-features = false }
-bytes = "0.5"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio-util = { version = "0.6", features = ["codec"], default-features = false }
+bytes = "1.0"

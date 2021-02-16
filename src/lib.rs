@@ -17,7 +17,7 @@ pub use mio_serial::{
 pub type Result<T> = mio_serial::Result<T>;
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::io::unix::AsyncFd;
+use tokio::io::unix::{AsyncFd, TryIoError};
 
 use std::io::{self, Read, Write};
 use std::pin::Pin;
@@ -220,37 +220,64 @@ macro_rules! ready_ok {
     })
 }
 
+// if try_io returns an error
+// we need to poll the future again
+macro_rules! while_would_block {
+    ($($tt:tt)*) => (
+        loop {
+            // make sure the type is correct
+            let r: std::result::Result<_, TryIoError> = { $($tt)* };
+            match r {
+                Ok(r) => return Poll::Ready(r),
+                Err(_would_block) => continue
+            }
+        }
+    )
+}
+
 impl AsyncRead for Serial {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context <'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        ready_ok!(self.get_mut().io.poll_read_ready_mut(cx))
-            .try_io(|serial| {
-                let slice = buf.initialize_unfilled();
-                let read = serial.get_mut().read(slice)?;
-                buf.advance(read);
-                Ok(())
-            })
-            .map(|r| Poll::Ready(r))
-            .unwrap_or(Poll::Pending)
+        let io = &mut self.get_mut().io;
+
+        // if try_io returns an error
+        // we need to poll the future again
+        while_would_block!{
+            ready_ok!(io.poll_read_ready_mut(cx))
+                .try_io(|serial| {
+                    let slice = buf.initialize_unfilled();
+                    let read = serial.get_mut().read(slice)?;
+                    buf.advance(read);
+                    Ok(())
+                })
+        }
     }
 }
 
 impl AsyncWrite for Serial {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context <'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        ready_ok!(self.get_mut().io.poll_read_ready_mut(cx))
-            .try_io(|serial| serial.get_mut().write(buf))
-            .map(|r| Poll::Ready(r))
-            .unwrap_or(Poll::Pending)
+        let io = &mut self.get_mut().io;
+
+        // if try_io returns an error
+        // we need to poll the future again
+        while_would_block!{
+            ready_ok!(io.poll_read_ready_mut(cx))
+                .try_io(|serial| serial.get_mut().write(buf))
+        }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context <'_>) -> Poll<io::Result<()>> {
-        ready_ok!(self.get_mut().io.poll_read_ready_mut(cx))
-            .try_io(|serial| serial.get_mut().flush())
-            .map(|r| Poll::Ready(r))
-            .unwrap_or(Poll::Pending)
+        let io = &mut self.get_mut().io;
+
+        // if try_io returns an error
+        // we need to poll the future again
+        while_would_block!{
+            ready_ok!(io.poll_read_ready_mut(cx))
+                .try_io(|serial| serial.get_mut().flush())
+        }
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context <'_>) -> Poll<io::Result<()>> {
